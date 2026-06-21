@@ -152,28 +152,25 @@
     padding:60px 20px;
   }
 
-  /* 固定樣式的對話框（如範例圖），自動加在媒體「正上方」獨立顯示，不會遮住原內容 */
+  /* 固定樣式的對話框（改為外部圖片） */
   .bubble{
     position:relative;
     width:100%;
-    background:var(--panel);
+    background:transparent;
   }
-  .bubble svg{
+  .bubble img{
     position:absolute;
     top:0;left:0;
     width:100%;
     height:100%;
     display:block;
-    overflow:visible;
+    object-fit:fill;
+    user-select:none;
+    -webkit-user-drag:none;
+    pointer-events:none;
   }
-  .bubble svg path{
-    fill:#fff;
-    stroke:#111;
-    stroke-width:6;
-    stroke-linejoin:round;
-    stroke-linecap:round;
-  }
-  .bubble.selected svg path{stroke:var(--accent);}
+  .bubble.selected img{outline:2px solid var(--accent);}
+
   .delbtn{
     position:absolute;
     top:2px;right:2px;
@@ -230,10 +227,10 @@
 
       <div class="status" id="fetchStatus"></div>
       <div class="hint" id="imgHint">
-        ⚠️ 此功能透過公開頁面的 og:image 預覽圖抓取貼文圖片（經由公開 CORS 代理），<b>僅適用於公開貼文</b>；若貼文是純文字、影片或代理失效，可能抓不到圖，請改用「本機圖片」上傳截圖。
+        ⚠️ 此功能透過公開頁面的 og:image 預覽圖抓取貼文圖片（經由公開 CORS 代理），<b>僅適用於公開貼文</b>；若貼文是純文字、影片或代理失效，可[...]
       </div>
       <div class="hint" id="videoHint" style="display:none;">
-        🎬 影片模式：請直接上傳本機影片檔（mp4 等），對話框會自動加在影片正上方（不遮住畫面）。下載時會把對話框與目前那一幀影片畫面上下合成，輸出成一張較高的 PNG 截圖。
+        🎬 影片模式：請直接上傳本機影片檔（mp4 等），對話框會自動加在影片正上方（不遮住畫面）。下載時會把對話框與目前那一幀影片畫面上下合[...]
       </div>
       <div class="hint">💬 對話框會自動加在媒體「正上方」獨立顯示，不會遮住原本內容，圖片/影片會完整保留並往下接著顯示，整張梗圖會自動變高。</div>
     </div>
@@ -271,11 +268,16 @@ const placeholder = document.getElementById('placeholder');
 const fetchStatus = document.getElementById('fetchStatus');
 const exportStatus = document.getElementById('exportStatus');
 
-const BUBBLE_ASPECT = 280/600; // 對話框 SVG 的高/寬比例（與範例圖固定形狀對應）
+// 使用外部圖片作為對話框，請把您提供的對話框圖檔上傳為 bubble.png（或改為 data URL）
+const BUBBLE_SRC = 'bubble.png';
+const BUBBLE_ASPECT = 280/600; // 保留原本比例作為預設
 const BUBBLE_SVG_PATH = 'M 20 130 C 20 50 140 10 300 10 C 460 10 580 50 580 130 L 580 140 C 580 165 555 180 520 180 L 320 180 L 300 270 L 280 180 L 80 180 C 45 180 20 165 20 140 Z';
 
 function buildBubbleSvg(){
   return '<svg viewBox="0 0 600 280" preserveAspectRatio="none"><path d="'+BUBBLE_SVG_PATH+'"/></svg>';
+}
+function buildBubbleImg(){
+  return '<img src="'+BUBBLE_SRC+'" class="bubbleimg" crossorigin="anonymous"/>';
 }
 
 // ---------- 圖片 / 影片 模式切換 ----------
@@ -442,14 +444,16 @@ document.getElementById('uploadVideoInput').addEventListener('change', (e)=>{
   setStatus(fetchStatus, '本機影片已載入，對話框已自動加上！', false, true);
 });
 
-// ---------- bubble（自動加上、固定樣式、滿版寬度、無文字，獨立顯示於媒體正上方） ----------
+// ---------- bubble（使用外部圖片） ----------
 function addBubble(){
   const old = stage.querySelector('.bubble');
   if(old) old.remove();
 
   const b = document.createElement('div');
   b.className = 'bubble';
-  b.innerHTML = buildBubbleSvg();
+
+  // 優先使用外部圖片作為對話框
+  b.innerHTML = buildBubbleImg();
 
   const del = document.createElement('div');
   del.className = 'delbtn';
@@ -464,7 +468,6 @@ function addBubble(){
 
 function applyBubbleHeight(b){
   if(!b) return;
-  // 寬度固定 100%（自動），高度依固定比例換算，確保尖角形狀不變形
   const stageW = stage.clientWidth || stage.getBoundingClientRect().width;
   b.style.height = (stageW * BUBBLE_ASPECT) + 'px';
 }
@@ -490,13 +493,14 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
         setStatus(exportStatus, '影片尚未載入完成，請稍候片刻再試一次。', true);
         return;
       }
-      exportVideoFrame(vid, !!bubble);
+      await exportVideoFrame(vid, !!bubble);
     } else {
       const canvas = await html2canvas(stage, {useCORS:true, backgroundColor:null, scale:2});
       downloadCanvas(canvas);
     }
     setStatus(exportStatus, '已下載！', false, true);
   }catch(err){
+    console.error(err);
     setStatus(exportStatus, '匯出失敗：媒體可能有跨域限制，建議改用「本機檔案」上傳後再匯出。', true);
   }finally{
     if(bubble) bubble.querySelectorAll('.delbtn').forEach(el=>el.style.display='');
@@ -510,20 +514,37 @@ function downloadCanvas(canvas, name){
   link.click();
 }
 
-// 影片無法直接用 html2canvas 擷取畫面，改用 canvas 手動畫出「對話框 + 當前影格」上下排列的合成圖
-function exportVideoFrame(vid, withBubble){
+// 影片匯出：先嘗試載入對話框圖片並繪製，失敗時回退到向量路徑繪製
+async function exportVideoFrame(vid, withBubble){
   if(!vid.videoWidth || !vid.videoHeight){
     throw new Error('影片尚未準備好');
   }
-  const w = vid.videoWidth, h = vid.videoHeight; // 用原始解析度匯出，畫質較佳
+  const w = vid.videoWidth, h = vid.videoHeight; // 原始解析度
   const bubbleH = withBubble ? Math.round(w * BUBBLE_ASPECT) : 0;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = bubbleH + h;
   const ctx = canvas.getContext('2d');
+
   if(withBubble){
-    drawBubbleOnCanvas(ctx, w, bubbleH, 0);
+    // 嘗試用外部圖片繪製對話框
+    try{
+      await new Promise((resolve, reject)=>{
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = ()=>{
+          ctx.drawImage(img, 0, 0, w, bubbleH);
+          resolve();
+        };
+        img.onerror = ()=>reject(new Error('bubble image load failed'));
+        img.src = BUBBLE_SRC;
+      });
+    }catch(e){
+      // image 載入失敗，使用原本的向量路徑 fallback
+      drawBubbleOnCanvas(ctx, w, bubbleH, 0);
+    }
   }
+
   ctx.drawImage(vid, 0, bubbleH, w, h);
   downloadCanvas(canvas, 'threads-meme.png');
 }
