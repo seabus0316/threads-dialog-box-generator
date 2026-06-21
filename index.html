@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>脆對話框梗圖產生器</title>
+<title>Threads 對話框梗圖產生器</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
@@ -269,6 +269,10 @@ const exportStatus = document.getElementById('exportStatus');
 const BUBBLE_IMG_SRC = 'https://i.ibb.co/tfs7cBW/image.png';
 const BUBBLE_ASPECT = 280/600; // 對話框圖片的高/寬比例，依實際圖片調整即可
 
+// 你的 Render 後端網址（記得換成自己部署後拿到的網址，不要保留結尾斜線）
+const BACKEND_BASE_URL = 'https://threads-dialog-box-generator.onrender.com';
+
+
 function buildBubbleImgHtml(){
   return '<img class="bubble-img" src="'+BUBBLE_IMG_SRC+'" crossorigin="anonymous" alt="對話框">';
 }
@@ -298,6 +302,28 @@ document.getElementById('fetchBtn').addEventListener('click', async ()=>{
   }
   setStatus(fetchStatus, '讀取中，請稍候...', false);
 
+  // 影片模式：改用自己的後端（yt-dlp）抓取，避免 CORS / 防盜連問題
+  if(currentMode === 'video'){
+    try{
+      const res = await fetch(BACKEND_BASE_URL + '/api/fetch-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if(!res.ok || !data.videoUrl){
+        setStatus(fetchStatus, data.error || '抓取失敗，請改用本機影片上傳。', true);
+        return;
+      }
+      loadVideoToStage(BACKEND_BASE_URL + data.videoUrl);
+      setStatus(fetchStatus, '影片下載成功！對話框已自動加上。', false, true);
+    }catch(e){
+      setStatus(fetchStatus, '伺服器連線失敗（可能正在喚醒中，請稍後再試一次），或改用本機影片上傳。', true);
+    }
+    return;
+  }
+
+  // 圖片模式：維持原本公開 CORS 代理抓 og:image 的方式
   const proxies = [
     'https://api.allorigins.win/raw?url=',
     'https://corsproxy.io/?url=',
@@ -323,16 +349,6 @@ document.getElementById('fetchBtn').addEventListener('click', async ()=>{
     return;
   }
 
-  if(currentMode === 'video'){
-    const videoUrl = extractOgVideo(html);
-    if(!videoUrl){
-      setStatus(fetchStatus, '找不到影片(平台多半會擋外連影片)，請改用本機影片上傳。', true);
-      return;
-    }
-    loadVideoToStage(videoUrl);
-    return;
-  }
-
   const imgUrl = extractOgImage(html);
   if(!imgUrl){
     setStatus(fetchStatus, '找不到圖片(可能是純文字/影片貼文)，請改用本機圖片上傳。', true);
@@ -346,13 +362,6 @@ function extractOgImage(html){
   let m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
   if(!m) m = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
   if(!m) m = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-  if(m && m[1]) return m[1].replace(/&amp;/g,'&');
-  return null;
-}
-
-function extractOgVideo(html){
-  let m = html.match(/<meta[^>]+property=["']og:video(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i);
-  if(!m) m = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video(?::secure_url)?["']/i);
   if(m && m[1]) return m[1].replace(/&amp;/g,'&');
   return null;
 }
