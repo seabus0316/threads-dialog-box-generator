@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Threads 對話框梗圖產生器</title>
+<title>脆對話框梗圖產生器</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
@@ -445,13 +445,6 @@ function addBubble(){
   const b = document.createElement('div');
   b.className = 'bubble';
   b.innerHTML = buildBubbleImgHtml();
-
-  const del = document.createElement('div');
-  del.className = 'delbtn';
-  del.innerText = '✕';
-  del.title = '移除對話框';
-  del.addEventListener('click', (e)=>{ e.stopPropagation(); b.remove(); });
-  b.appendChild(del);
 
   stage.prepend(b); // 對話框放在最前面，疊在媒體正上方而非覆蓋於其上
   applyBubbleHeight(b);
