@@ -1,12 +1,14 @@
 FROM node:20-slim
 
-# 安裝 python3、pip、ffmpeg（yt-dlp 需要）
+# 安裝 python3、ffmpeg、curl（yt-dlp 需要）
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-pip ffmpeg ca-certificates && \
+    apt-get install -y --no-install-recommends python3 ffmpeg ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
-# 安裝最新版 yt-dlp（用 pip 裝才會是最新版，apt 版本太舊容易失效）
-RUN pip3 install --no-cache-dir --break-system-packages -U yt-dlp
+# 直接抓 yt-dlp 官方最新 binary release（比 pip 版本更新更快，新網站支援更即時）
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp && \
+    /usr/local/bin/yt-dlp --version
 
 WORKDIR /app
 

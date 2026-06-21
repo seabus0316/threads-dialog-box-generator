@@ -9,6 +9,9 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// Render 在前面有 proxy，要設定 trust proxy 才能讓 express-rate-limit 正常讀取 X-Forwarded-For
+app.set('trust proxy', 1);
+
 const DOWNLOAD_DIR = path.join(__dirname, 'tmp_downloads');
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
@@ -66,7 +69,11 @@ app.post('/api/fetch-video', fetchLimiter, (req, res) => {
   execFile('yt-dlp', args, { timeout: 60000 }, (err, stdout, stderr) => {
     if (err) {
       console.error('yt-dlp error:', stderr || err.message);
-      return res.status(500).json({ error: '抓取失敗，可能是私人貼文、純文字貼文，或連結錯誤' });
+      const detail = (stderr || err.message || '').slice(-500); // 只取最後 500 字避免太長
+      return res.status(500).json({
+        error: '抓取失敗，可能是私人貼文、純文字貼文，或連結錯誤',
+        detail
+      });
     }
 
     // yt-dlp 可能輸出 .mp4 之外的副檔名，找出實際產生的檔案
