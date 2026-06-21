@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threads 對話框梗圖產生器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --bg:#0f0f10;
+    --panel:#1a1a1c;
+    --panel2:#222225;
+    --accent:#6ee7ff;
+    --accent2:#ff6e9c;
+    --text:#f2f2f2;
+    --muted:#9a9aa0;
+    --border:#33333a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,"PingFang TC","Noto Sans TC",Segoe UI,Roboto,sans-serif;
+    background:linear-gradient(135deg,#0f0f10,#17171c);
+    color:var(--text);
+    min-height:100vh;
+  }
+  header{
+    padding:20px 24px 10px;
+    text-align:center;
+  }
+  header h1{
+    margin:0 0 4px;
+    font-size:22px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    font-weight:800;
+  }
+  header p{margin:0;color:var(--muted);font-size:13px;}
+
+  .layout{
+    display:flex;
+    gap:16px;
+    max-width:1200px;
+    margin:0 auto;
+    padding:10px 16px 60px;
+    flex-wrap:wrap;
+  }
+  .col-left{flex:1 1 320px;max-width:380px;}
+  .col-right{flex:2 1 480px;min-width:320px;}
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card h2{
+    margin:0 0 10px;
+    font-size:14px;
+    color:var(--accent);
+    letter-spacing:.5px;
+  }
+  label{font-size:12px;color:var(--muted);display:block;margin:10px 0 4px;}
+  input[type=text], input[type=url]{
+    width:100%;
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:var(--panel2);
+    color:var(--text);
+    font-size:13px;
+  }
+  input[type=range]{width:100%;}
+  .row{display:flex;gap:8px;}
+  .row > *{flex:1;}
+
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    padding:10px 14px;
+    font-size:13px;
+    font-weight:600;
+    color:#0f0f10;
+    background:var(--accent);
+    transition:.15s;
+  }
+  button.secondary{
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--border);
+  }
+  button.danger{background:var(--accent2);}
+  button:hover{filter:brightness(1.08);}
+  button:active{transform:scale(.97);}
+  .btn-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:6px;}
+  .status{font-size:12px;margin-top:8px;min-height:16px;}
+  .status.err{color:var(--accent2);}
+  .status.ok{color:#7CFFB2;}
+
+  .shapes{display:flex;gap:8px;flex-wrap:wrap;}
+  .shape-btn{
+    flex:1;
+    min-width:70px;
+    background:var(--panel2);
+    color:var(--text);
+    border:1px solid var(--border);
+    font-size:12px;
+    padding:8px 6px;
+  }
+  .shape-btn.active{border-color:var(--accent);color:var(--accent);}
+
+  #stageOuter{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:14px;
+  }
+  #stageWrap{
+    position:relative;
+    width:100%;
+    max-width:600px;
+    margin:0 auto;
+    background:#000;
+    border-radius:8px;
+    overflow:hidden;
+    min-height:300px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #stage{
+    position:relative;
+    width:100%;
+    background:#050505;
+  }
+  #stage img.bgimg{
+    width:100%;
+    display:block;
+    user-select:none;
+    -webkit-user-drag:none;
+  }
+  #placeholder{
+    color:var(--muted);
+    font-size:13px;
+    text-align:center;
+    padding:60px 20px;
+  }
+
+  .bubble{
+    position:absolute;
+    min-width:60px;
+    min-height:40px;
+    background:#fff;
+    color:#111;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:10px 14px;
+    font-weight:700;
+    font-size:16px;
+    line-height:1.25;
+    cursor:move;
+    box-shadow:0 2px 6px rgba(0,0,0,.35);
+    border:2.5px solid #111;
+    border-radius:50%/40%;
+  }
+  .bubble.shape-round{border-radius:50%/45%;}
+  .bubble.shape-rect{border-radius:14px;}
+  .bubble.shape-cloud{
+    border-radius:42% 38% 45% 40% / 55% 60% 40% 45%;
+  }
+  .bubble.shape-shout{
+    border-radius:8px;
+    clip-path:polygon(8% 0%,25% 10%,42% 0%,58% 10%,75% 0%,92% 10%,100% 30%,90% 50%,100% 70%,92% 92%,75% 100%,58% 90%,42% 100%,25% 90%,8% 100%,0% 70%,10% 50%,0% 30%);
+  }
+  .bubble .tail{
+    position:absolute;
+    width:0;height:0;
+    border-style:solid;
+    border-color:#fff transparent transparent transparent;
+    bottom:-22px;
+    left:24px;
+    border-width:24px 14px 0 0;
+    filter:drop-shadow(0 2px 0 #111);
+  }
+  .bubble.shape-cloud .tail{display:none;}
+  .bubble .tail-outline{
+    position:absolute;
+    width:0;height:0;
+    border-style:solid;
+    border-color:#111 transparent transparent transparent;
+    bottom:-25px;
+    left:21px;
+    border-width:27px 17px 0 0;
+    z-index:-1;
+  }
+  .bubble.shape-cloud .tail-outline{display:none;}
+  .bubble .puff{
+    position:absolute;
+    background:#fff;
+    border:2.5px solid #111;
+    border-radius:50%;
+  }
+  .bubble.shape-cloud .puff{display:block;}
+  .bubble:not(.shape-cloud) .puff{display:none;}
+
+  .bubble.selected{outline:2px dashed var(--accent);outline-offset:3px;}
+  .bubble .txt{
+    width:100%;
+    outline:none;
+    word-break:break-word;
+    white-space:pre-wrap;
+  }
+  .handle{
+    position:absolute;
+    width:14px;height:14px;
+    background:var(--accent);
+    border-radius:50%;
+    right:-7px;bottom:-7px;
+    cursor:se-resize;
+    border:2px solid #0f0f10;
+  }
+  .delbtn{
+    position:absolute;
+    top:-10px;right:-10px;
+    width:20px;height:20px;
+    background:var(--accent2);
+    color:#0f0f10;
+    border-radius:50%;
+    font-size:13px;
+    line-height:20px;
+    text-align:center;
+    cursor:pointer;
+    border:2px solid #0f0f10;
+    font-weight:900;
+  }
+  footer{
+    text-align:center;
+    color:var(--muted);
+    font-size:11px;
+    padding:20px;
+  }
+  a{color:var(--accent);text-decoration:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧵 Threads 對話框梗圖產生器</h1>
+  <p>貼上 Threads 貼文連結 → 抓取圖片 → 加上對話框 → 下載梗圖</p>
+</header>
+
+<div class="layout">
+
+  <div class="col-left">
+
+    <div class="card">
+      <h2>① 貼上 Threads 連結</h2>
+      <input type="url" id="threadsUrl" placeholder="https://www.threads.net/@user/post/xxxxx">
+      <div class="btn-wrap">
+        <button id="fetchBtn">讀取貼文圖片</button>
+        <button class="secondary" id="uploadBtnTrigger">改用本機圖片</button>
+      </div>
+      <input type="file" id="uploadInput" accept="image/*" style="display:none;">
+      <div class="status" id="fetchStatus"></div>
+      <div class="hint">
+        ⚠️ 此功能透過公開頁面的 og:image 預覽圖抓取貼文圖片（經由公開 CORS 代理），<b>僅適用於公開貼文</b>；若貼文是純文字、影片或代理失效，可能抓不到圖，請改用「本機圖片」上傳截圖。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>② 新增對話框</h2>
+      <div class="shapes" id="shapeButtons">
+        <button class="shape-btn active" data-shape="shape-round">💬 圓角對話框</button>
+        <button class="shape-btn" data-shape="shape-rect">▭ 方形對話框</button>
+        <button class="shape-btn" data-shape="shape-cloud">☁️ 思考雲</button>
+        <button class="shape-btn" data-shape="shape-shout">💥 爆炸驚呼框</button>
+      </div>
+      <div class="btn-wrap">
+        <button id="addBubbleBtn">＋ 新增對話框</button>
+      </div>
+
+      <label>文字內容（先點選對話框再編輯）</label>
+      <input type="text" id="bubbleTextInput" placeholder="點一下對話框，再輸入文字...">
+
+      <label>字體大小</label>
+      <input type="range" id="fontSizeRange" min="10" max="48" value="16">
+
+      <div class="hint">提示：拖曳對話框可移動位置，右下角藍點可拖曳調整大小，右上角紅色 ✕ 可刪除。</div>
+    </div>
+
+    <div class="card">
+      <h2>③ 匯出</h2>
+      <div class="btn-wrap">
+        <button id="exportBtn">⬇ 下載梗圖 PNG</button>
+        <button class="secondary" id="clearBtn">清除所有對話框</button>
+      </div>
+      <div class="status" id="exportStatus"></div>
+    </div>
+
+  </div>
+
+  <div class="col-right">
+    <div id="stageOuter">
+      <div id="stageWrap">
+        <div id="stage">
+          <div id="placeholder">尚未載入圖片<br>請先貼上 Threads 連結並讀取，或上傳本機圖片</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  純前端工具，所有圖片處理都在你的瀏覽器內完成，不會上傳到任何伺服器。請尊重原作者版權，僅供個人娛樂使用。
+</footer>
+
+<script>
+const stage = document.getElementById('stage');
+const stageWrap = document.getElementById('stageWrap');
+const placeholder = document.getElementById('placeholder');
+const fetchStatus = document.getElementById('fetchStatus');
+const exportStatus = document.getElementById('exportStatus');
+
+let currentShape = 'shape-round';
+let selectedBubble = null;
+let bubbleCount = 0;
+
+// ---------- shape selection ----------
+document.querySelectorAll('.shape-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.shape-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentShape = btn.dataset.shape;
+  });
+});
+
+// ---------- load image: threads fetch ----------
+document.getElementById('fetchBtn').addEventListener('click', async ()=>{
+  const url = document.getElementById('threadsUrl').value.trim();
+  if(!url){
+    setStatus(fetchStatus, '請先貼上 Threads 貼文連結', true);
+    return;
+  }
+  setStatus(fetchStatus, '讀取中，請稍候...', false);
+
+  const proxies = [
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?url=',
+    'https://r.jina.ai/'
+  ];
+
+  let html = null;
+  for(const proxy of proxies){
+    try{
+      const target = proxy.includes('jina.ai') ? proxy + url : proxy + encodeURIComponent(url);
+      const res = await fetch(target);
+      if(!res.ok) continue;
+      const text = await res.text();
+      if(text && text.length > 200){
+        html = text;
+        break;
+      }
+    }catch(e){ /* try next proxy */ }
+  }
+
+  if(!html){
+    setStatus(fetchStatus, '抓取失敗，網站可能擋住了存取，請改用本機圖片上傳。', true);
+    return;
+  }
+
+  const imgUrl = extractOgImage(html);
+  if(!imgUrl){
+    setStatus(fetchStatus, '找不到圖片(可能是純文字/影片貼文)，請改用本機圖片上傳。', true);
+    return;
+  }
+
+  loadImageToStage(imgUrl, true);
+});
+
+function extractOgImage(html){
+  let m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+  if(!m) m = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+  if(!m) m = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+  if(m && m[1]) return m[1].replace(/&amp;/g,'&');
+  return null;
+}
+
+function loadImageToStage(src, viaProxy){
+  // try loading directly; if blocked by CORS for canvas export, fall back to image-proxy for export only display still works
+  const testSrc = viaProxy ? ('https://images.weserv.nl/?url=' + encodeURIComponent(src.replace(/^https?:\/\//,''))) : src;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = ()=>{
+    setStage(testSrc);
+    setStatus(fetchStatus, '圖片載入成功！可以開始加對話框了。', false, true);
+  };
+  img.onerror = ()=>{
+    // fallback: try original src without proxy wrapper
+    const img2 = new Image();
+    img2.crossOrigin = 'anonymous';
+    img2.onload = ()=>{
+      setStage(src);
+      setStatus(fetchStatus, '圖片載入成功！可以開始加對話框了。', false, true);
+    };
+    img2.onerror = ()=>{
+      setStatus(fetchStatus, '圖片無法載入(可能有防盜連保護)，請改用本機圖片上傳。', true);
+    };
+    img2.src = src;
+  };
+  img.src = testSrc;
+}
+
+function setStage(src){
+  stage.innerHTML = '';
+  const im = document.createElement('img');
+  im.src = src;
+  im.className = 'bgimg';
+  im.crossOrigin = 'anonymous';
+  stage.appendChild(im);
+}
+
+// ---------- upload local image ----------
+document.getElementById('uploadBtnTrigger').addEventListener('click', ()=>{
+  document.getElementById('uploadInput').click();
+});
+document.getElementById('uploadInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    setStage(reader.result);
+    setStatus(fetchStatus, '本機圖片已載入！', false, true);
+  };
+  reader.readAsDataURL(file);
+});
+
+// ---------- bubbles ----------
+document.getElementById('addBubbleBtn').addEventListener('click', ()=>{
+  if(!stage.querySelector('img.bgimg')){
+    setStatus(fetchStatus, '請先載入圖片再新增對話框', true);
+    return;
+  }
+  addBubble();
+});
+
+function addBubble(){
+  bubbleCount++;
+  const b = document.createElement('div');
+  b.className = 'bubble ' + currentShape;
+  b.style.left = (40 + (bubbleCount%4)*20) + 'px';
+  b.style.top = (40 + (bubbleCount%4)*20) + 'px';
+  b.style.width = '160px';
+  b.style.height = '90px';
+
+  const txt = document.createElement('div');
+  txt.className = 'txt';
+  txt.contentEditable = true;
+  txt.innerText = '輸入文字...';
+  txt.style.fontSize = document.getElementById('fontSizeRange').value + 'px';
+  b.appendChild(txt);
+
+  const tailOutline = document.createElement('div');
+  tailOutline.className = 'tail-outline';
+  b.appendChild(tailOutline);
+  const tail = document.createElement('div');
+  tail.className = 'tail';
+  b.appendChild(tail);
+
+  for(let i=0;i<3;i++){
+    const puff = document.createElement('div');
+    puff.className = 'puff';
+    const size = 14 - i*3;
+    puff.style.width = size+'px';
+    puff.style.height = size+'px';
+    puff.style.left = (10 + i*10)+'px';
+    puff.style.bottom = (-8 - i*8)+'px';
+    b.appendChild(puff);
+  }
+
+  const handle = document.createElement('div');
+  handle.className = 'handle';
+  b.appendChild(handle);
+
+  const del = document.createElement('div');
+  del.className = 'delbtn';
+  del.innerText = '✕';
+  del.addEventListener('click', (e)=>{ e.stopPropagation(); b.remove(); if(selectedBubble===b) selectedBubble=null; });
+  b.appendChild(del);
+
+  stage.appendChild(b);
+  selectBubble(b);
+
+  b.addEventListener('mousedown', (e)=>startDrag(e,b));
+  b.addEventListener('touchstart', (e)=>startDrag(e,b), {passive:false});
+  handle.addEventListener('mousedown', (e)=>startResize(e,b));
+  handle.addEventListener('touchstart', (e)=>startResize(e,b), {passive:false});
+  txt.addEventListener('mousedown', (e)=>e.stopPropagation());
+  txt.addEventListener('focus', ()=>selectBubble(b));
+  b.addEventListener('click', ()=>selectBubble(b));
+}
+
+function selectBubble(b){
+  document.querySelectorAll('.bubble').forEach(x=>x.classList.remove('selected'));
+  b.classList.add('selected');
+  selectedBubble = b;
+  document.getElementById('bubbleTextInput').value = b.querySelector('.txt').innerText;
+  document.getElementById('fontSizeRange').value = parseInt(b.querySelector('.txt').style.fontSize) || 16;
+}
+
+document.getElementById('bubbleTextInput').addEventListener('input', (e)=>{
+  if(selectedBubble){
+    selectedBubble.querySelector('.txt').innerText = e.target.value;
+  }
+});
+document.getElementById('fontSizeRange').addEventListener('input', (e)=>{
+  if(selectedBubble){
+    selectedBubble.querySelector('.txt').style.fontSize = e.target.value + 'px';
+  }
+});
+
+let dragData = null;
+function startDrag(e, b){
+  if(e.target.classList.contains('handle') || e.target.classList.contains('delbtn')) return;
+  e.preventDefault();
+  selectBubble(b);
+  const point = e.touches ? e.touches[0] : e;
+  const rect = b.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  dragData = {
+    bubble:b,
+    offsetX: point.clientX - rect.left,
+    offsetY: point.clientY - rect.top,
+    stageRect
+  };
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('touchmove', onDrag, {passive:false});
+  document.addEventListener('mouseup', stopDrag);
+  document.addEventListener('touchend', stopDrag);
+}
+function onDrag(e){
+  if(!dragData) return;
+  e.preventDefault();
+  const point = e.touches ? e.touches[0] : e;
+  const stageRect = stage.getBoundingClientRect();
+  let x = point.clientX - stageRect.left - dragData.offsetX;
+  let y = point.clientY - stageRect.top - dragData.offsetY;
+  dragData.bubble.style.left = x + 'px';
+  dragData.bubble.style.top = y + 'px';
+}
+function stopDrag(){
+  dragData = null;
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('touchmove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+  document.removeEventListener('touchend', stopDrag);
+}
+
+let resizeData = null;
+function startResize(e, b){
+  e.preventDefault();
+  e.stopPropagation();
+  const point = e.touches ? e.touches[0] : e;
+  resizeData = {
+    bubble:b,
+    startX: point.clientX,
+    startY: point.clientY,
+    startW: b.offsetWidth,
+    startH: b.offsetHeight
+  };
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('touchmove', onResize, {passive:false});
+  document.addEventListener('mouseup', stopResize);
+  document.addEventListener('touchend', stopResize);
+}
+function onResize(e){
+  if(!resizeData) return;
+  e.preventDefault();
+  const point = e.touches ? e.touches[0] : e;
+  const dx = point.clientX - resizeData.startX;
+  const dy = point.clientY - resizeData.startY;
+  resizeData.bubble.style.width = Math.max(60, resizeData.startW + dx) + 'px';
+  resizeData.bubble.style.height = Math.max(40, resizeData.startH + dy) + 'px';
+}
+function stopResize(){
+  resizeData = null;
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('touchmove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.removeEventListener('touchend', stopResize);
+}
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  document.querySelectorAll('.bubble').forEach(b=>b.remove());
+  selectedBubble = null;
+});
+
+// ---------- export ----------
+document.getElementById('exportBtn').addEventListener('click', async ()=>{
+  if(!stage.querySelector('img.bgimg')){
+    setStatus(exportStatus, '請先載入圖片', true);
+    return;
+  }
+  setStatus(exportStatus, '匯出中...', false);
+  document.querySelectorAll('.bubble').forEach(b=>{
+    b.classList.remove('selected');
+    b.querySelectorAll('.handle, .delbtn').forEach(el=>el.style.display='none');
+  });
+  try{
+    const canvas = await html2canvas(stage, {useCORS:true, backgroundColor:null, scale:2});
+    const link = document.createElement('a');
+    link.download = 'threads-meme.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    setStatus(exportStatus, '已下載！', false, true);
+  }catch(err){
+    setStatus(exportStatus, '匯出失敗：圖片可能有跨域限制，建議改用「本機圖片」上傳後再匯出。', true);
+  }finally{
+    document.querySelectorAll('.bubble').forEach(b=>{
+      b.querySelectorAll('.handle, .delbtn').forEach(el=>el.style.display='');
+    });
+  }
+});
+
+function setStatus(el, msg, isErr, isOk){
+  el.textContent = msg;
+  el.className = 'status' + (isErr?' err':(isOk?' ok':''));
+}
+</script>
+
+</body>
+</html>
