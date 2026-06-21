@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -25,6 +24,13 @@ const fetchLimiter = rateLimit({
   message: { error: '請求太頻繁，請稍後再試' }
 });
 
+// 模擬真實瀏覽器的 headers，Threads 對沒有這些 header 的請求容易直接擋掉或回傳精簡版頁面
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9'
+};
+
 // 清理過期暫存檔（保險機制，避免 setTimeout 因重啟而失效）
 function cleanupOldFiles() {
   fs.readdir(DOWNLOAD_DIR, (err, files) => {
@@ -47,52 +53,84 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Threads video backend running' });
 });
 
-app.post('/api/fetch-video', fetchLimiter, (req, res) => {
+function extractOgVideo(html) {
+  let m = html.match(/<meta[^>]+property=["']og:video(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i);
+  if (!m) m = html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:video(?::secure_url)?["']/i);
+  if (m && m[1]) return m[1].replace(/&amp;/g, '&');
+
+  // 備用方案：直接從頁面內嵌的 JSON 找 video_url（Threads 常把資料塞在 script 裡）
+  m = html.match(/"video_url":"([^"]+)"/);
+  if (m && m[1]) {
+    try {
+      return JSON.parse('"' + m[1] + '"');
+    } catch (e) {
+      return m[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+    }
+  }
+  return null;
+}
+
+app.post('/api/fetch-video', fetchLimiter, async (req, res) => {
   const { url } = req.body || {};
 
   if (!url || typeof url !== 'string' || !/^https?:\/\/(www\.)?threads\.(net|com)\//.test(url)) {
     return res.status(400).json({ error: '請提供有效的 Threads 貼文連結' });
   }
 
-  const id = crypto.randomBytes(8).toString('hex');
-  const outputTemplate = path.join(DOWNLOAD_DIR, `${id}.%(ext)s`);
-
-  // 用 execFile 而非 exec，避免 shell 注入風險；參數陣列傳入
-  const args = [
-    url,
-    '-f', 'mp4/best',
-    '--no-playlist',
-    '--max-filesize', '50M',
-    '-o', outputTemplate
-  ];
-
-  execFile('yt-dlp', args, { timeout: 60000 }, (err, stdout, stderr) => {
-    if (err) {
-      console.error('yt-dlp error:', stderr || err.message);
-      const detail = (stderr || err.message || '').slice(-500); // 只取最後 500 字避免太長
+  try {
+    // 1. 先抓貼文頁面 HTML
+    const pageRes = await fetch(url, { headers: BROWSER_HEADERS });
+    if (!pageRes.ok) {
       return res.status(500).json({
-        error: '抓取失敗，可能是私人貼文、純文字貼文，或連結錯誤',
-        detail
+        error: '無法讀取貼文頁面',
+        detail: `HTTP ${pageRes.status}`
+      });
+    }
+    const html = await pageRes.text();
+
+    // 2. 解析出影片網址
+    const videoUrl = extractOgVideo(html);
+    if (!videoUrl) {
+      return res.status(404).json({
+        error: '找不到影片，可能是純文字貼文、私人貼文，或頁面結構已變動',
+        detail: 'og:video meta tag 與內嵌 JSON 都沒找到 video_url'
       });
     }
 
-    // yt-dlp 可能輸出 .mp4 之外的副檔名，找出實際產生的檔案
-    fs.readdir(DOWNLOAD_DIR, (readErr, files) => {
-      if (readErr) return res.status(500).json({ error: '伺服器讀取錯誤' });
+    // 3. 下載影片本體（伺服器對伺服器，沒有 CORS 問題）
+    const videoRes = await fetch(videoUrl, { headers: BROWSER_HEADERS });
+    if (!videoRes.ok) {
+      return res.status(500).json({
+        error: '影片下載失敗',
+        detail: `HTTP ${videoRes.status}`
+      });
+    }
 
-      const match = files.find(f => f.startsWith(id));
-      if (!match) {
-        return res.status(500).json({ error: '抓取失敗，找不到輸出檔案' });
-      }
+    const contentLength = parseInt(videoRes.headers.get('content-length') || '0', 10);
+    if (contentLength > 50 * 1024 * 1024) {
+      return res.status(413).json({ error: '影片超過 50MB 限制' });
+    }
 
-      res.json({ videoUrl: `/tmp_downloads/${match}` });
+    const id = crypto.randomBytes(8).toString('hex');
+    const outputPath = path.join(DOWNLOAD_DIR, `${id}.mp4`);
 
-      // 10 分鐘後自動刪除
-      setTimeout(() => {
-        fs.unlink(path.join(DOWNLOAD_DIR, match), () => {});
-      }, 10 * 60 * 1000);
+    const buffer = Buffer.from(await videoRes.arrayBuffer());
+    fs.writeFileSync(outputPath, buffer);
+
+    res.json({ videoUrl: `/tmp_downloads/${id}.mp4` });
+
+    // 10 分鐘後自動刪除
+    setTimeout(() => {
+      fs.unlink(outputPath, () => {});
+    }, 10 * 60 * 1000);
+
+  } catch (err) {
+    console.error('fetch-video error:', err);
+    return res.status(500).json({
+      error: '抓取失敗',
+      detail: String(err.message || err).slice(-500)
     });
-  });
+  }
 });
 
 // 靜態提供暫存影片檔
