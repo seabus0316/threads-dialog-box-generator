@@ -93,15 +93,12 @@
     color:var(--text);
     border:1px solid var(--border);
   }
-  button.danger{background:var(--accent2);}
-  button:hover{filter:brightness(1.08);}
-  button:active{transform:scale(.97);}
-  .btn-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+  button.danger{background:var(--accent2);}n
+  button:hover{filter:brightness(1.08);}n  button:active{transform:scale(.97);}n  .btn-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
 
   .hint{font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:6px;}
   .status{font-size:12px;margin-top:8px;min-height:16px;}
-  .status.err{color:var(--accent2);}
-  .status.ok{color:#7CFFB2;}
+  .status.err{color:var(--accent2);}n  .status.ok{color:#7CFFB2;}
 
   .shapes{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
   .shape-btn{
@@ -169,8 +166,7 @@
     -webkit-user-drag:none;
     pointer-events:none;
   }
-  .bubble.selected img{outline:2px solid var(--accent);}
-
+  .bubble.selected img{outline:2px solid var(--accent);}n
   .delbtn{
     position:absolute;
     top:2px;right:2px;
@@ -268,8 +264,8 @@ const placeholder = document.getElementById('placeholder');
 const fetchStatus = document.getElementById('fetchStatus');
 const exportStatus = document.getElementById('exportStatus');
 
-// 使用外部圖片作為對話框，請把您提供的對話框圖檔上傳為 bubble.png（或改為 data URL）
-const BUBBLE_SRC = 'bubble.png';
+// 使用外部圖片作為對話框，已改為使用您提供的 URL（i.ibb.co）
+const BUBBLE_SRC = 'https://i.ibb.co/tfs7cBW/image.png';
 const BUBBLE_ASPECT = 280/600; // 保留原本比例作為預設
 const BUBBLE_SVG_PATH = 'M 20 130 C 20 50 140 10 300 10 C 460 10 580 50 580 130 L 580 140 C 580 165 555 180 520 180 L 320 180 L 300 270 L 280 180 L 80 180 C 45 180 20 165 20 140 Z';
 
@@ -493,6 +489,7 @@ document.getElementById('exportBtn').addEventListener('click', async ()=>{
         setStatus(exportStatus, '影片尚未載入完成，請稍候片刻再試一次。', true);
         return;
       }
+      // exportVideoFrame 會先嘗試載入外部 bubble 圖片，失敗時回退到向量繪製
       await exportVideoFrame(vid, !!bubble);
     } else {
       const canvas = await html2canvas(stage, {useCORS:true, backgroundColor:null, scale:2});
